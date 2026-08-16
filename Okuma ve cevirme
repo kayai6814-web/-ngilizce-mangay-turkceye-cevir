@@ -1,0 +1,41 @@
+import easyocr
+from deep_translator import GoogleTranslator
+
+class MangaCevirmen:
+    def __init__(self):
+        # İngilizce dil desteği ile OCR okuyucusunu başlatıyoruz
+        print("OCR modeli yükleniyor, lütfen bekleyin...")
+        self.okuyucu = easyocr.Reader(['en'])
+        self.cevirmen = GoogleTranslator(source='en', target='tr')
+
+    def metin_oku_ve_cevir(self, goruntu_yolu):
+        """Manga sayfasındaki İngilizce metinleri bulur ve Türkçe'ye çevirir."""
+        print(f"\n'{goruntu_yolu' taranıyor...")
+        
+        # Görseldeki metinleri ve koordinatlarını oku
+        sonuclar = self.okuyucu.readtext(goruntu_yolu)
+        
+        bulunan_metinler = []
+        for bbox, metin, guven in sonuclar:
+            # Düşük güven skorlu hatalı okumaları eleyebiliriz (örn: %30 altı)
+            if guven > 0.3:
+                turkce_cevirisi = self.cevirmen.translate(metin)
+                bulunan_metinler.append({
+                    "orijinal": metin,
+                    "cevirisi": turkce_cevirisi,
+                    "guven": round(guven, 2)
+                })
+        
+        return bulunan_metinler
+
+# --- KULLANIM ÖRNEĞİ ---
+if __name__ == "__main__":
+    # Sinematik veya test amaçlı bir manga sayfa görseli yolu (örn: "manga_sayfa1.jpg")
+    bot = MangaCevirmen()
+    
+    # Örnek dosya adı ile test (Kendi manga görselinin yolunu buraya yazabilirsin)
+    # sonuclar = bot.metin_oku_ve_cevir("manga_sayfa1.jpg")
+    # for item in sonuclar:
+    #     print(f"EN: {item['orijinal']} --> TR: {item['cevirisi']}")
+    
+    print("\nSistem hazır! Manga görselini ekleyip taratabiliriz.")
