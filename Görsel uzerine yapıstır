@@ -1,0 +1,65 @@
+import cv2
+import easyocr
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+from deep_translator import GoogleTranslator
+
+class GelismisMangaCevirmen:
+    def __init__(self):
+        print("OCR ve Çeviri modelleri yükleniyor...")
+        self.okuyucu = easyocr.Reader(['en'])
+        self.cevirmen = GoogleTranslator(source='en', target='tr')
+
+    def sayfayi_cevir_ve_isaretle(self, giris_dosyasi, cikis_dosyasi):
+        """Manga sayfasındaki metinleri bulur, siler, Türkçesini yazar ve kaydeder."""
+        print(f"'{giris_dosyasi}' işleniyor...")
+        
+        # OpenCV ile resmi oku
+        goruntu_cv = cv2.imread(giris_dosyasi)
+        if goruntu_cv is None:
+            print("Hata: Görsel bulunamadı!")
+            return
+            
+        Yukseklik, Genislik, _ = goruntu_cv.shape
+        
+        # PIL (Pillow) formatına çevir (Yazı yazmak için daha kolaydır)
+        goruntu_pil = Image.open(giris_dosyasi).convert("RGB")
+        cizim = ImageDraw.Draw(goruntu_pil)
+        
+        # Font ayarlaması (Sistemde varsayılan bir font veya özel manga fontu kullanılabilir)
+        try:
+            font = ImageFont.truetype("arial.ttf", 16)
+        except:
+            font = ImageFont.load_default()
+
+        # Metinleri tara
+        sonuclar = self.okuyucu.readtext(giris_dosyasi)
+        
+        for bbox, metin, guven in sonuclar:
+            if guven > 0.3:
+                # 1. Koordinatları al
+                sol_ust = bbox[0]
+                sag_alt = bbox[2]
+                
+                # 2. Orijinal İngilizce yazının olduğu alanı beyaz kutuyla kapat (Temizleme / Inpaint mantığı)
+                # Not: Gelişmiş versiyonda arka plan rengi taranır ama şimdilik beyaz balonlar için temizleme kutusu kullanıyoruz.
+                cizim.rectangle([sol_ust[0], sol_ust[1], sag_alt[0], sag_alt[1]], fill="white")
+                
+                # 3. Çeviriyi yap
+                turkce_metin = self.cevirmen.translate(metin)
+                
+                # 4. Türkçe metni balonun içine yazdır
+                cizim.text((sol_ust[0] + 5, sol_ust[1] + 5), turkce_metin, fill="black", font=font)
+                print(f"Çevrildi ve Yerleştirildi: '{metin}' ---> '{turkce_metin}'")
+
+        # Yeni görseli kaydet
+        goruntu_pil.save(cikis_dosyasi)
+        print(f"\nİşlem tamam! Yeni manga sayfası '{cikis_dosyasi}' olarak kaydedildi.")
+
+# --- KULLANIM ÖRNEĞİ ---
+if __name__ == "__main__":
+    cevirmen = GelismisMangaCevirmen()
+    
+    # Test etmek için kendi manga sayfanın adını yazabilirsin:
+    # cevirmen.sayfayi_cevir_ve_isaretle("orijinal_manga.jpg", "turkce_manga.jpg")
+    print("Modül hazır! Görseli verip tam otomatik çeviri yapabiliriz.")
