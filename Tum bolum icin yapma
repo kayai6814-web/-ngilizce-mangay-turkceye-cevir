@@ -1,0 +1,77 @@
+import os
+import cv2
+import easyocr
+from PIL import Image, ImageDraw, ImageFont
+from deep_translator import GoogleTranslator
+
+class TopluMangaCevirmen:
+    def __init__(self):
+        print("OCR ve Çeviri modelleri yükleniyor, lütfen bekleyin...")
+        self.okuyucu = easyocr.Reader(['en'])
+        self.cevirmen = GoogleTranslator(source='en', target='tr')
+
+    def klasoru_cevir(self, kaynak_klasor, hedef_klasor):
+        """Belirtilen klasördeki tüm manga sayfalarını toplu olarak çevirir."""
+        if not os.path.exists(hedef_klasor):
+            os.makedirs(hedef_klasor)
+            
+        # Klasördeki tüm dosyaları listele
+        desteklenen_uzantilar = ('.png', '.jpg', '.jpeg', '.webp')
+        dosyalar = [f for f in os.listdir(kaynak_klasor) if f.lower().endswith(desteklenen_uzantilar)]
+        
+        if not dosyalar:
+            print(f"'{kaynak_klasor}' içinde çevrilecek uygun görsel bulunamadı!")
+            return
+
+        print(f"\nToplam {len(dosyalar)} sayfa bulundu. Toplu çeviri başlatılıyor...\n")
+
+        for sira, dosya_adi in enumerate(sorted(dosyalar), 1):
+            giris_yolu = os.path.join(kaynak_klasor, dosya_adi)
+            cikis_yolu = os.path.join(hedef_klasor, dosya_adi)
+            
+            print(f"[{sira}/{len(dosyalar)}] İşleniyor: {dosya_adi}")
+            
+            try:
+                # PIL formatına çevir
+                goruntu_pil = Image.open(giris_yolu).convert("RGB")
+                cizim = ImageDraw.Draw(goruntu_pil)
+                
+                try:
+                    font = ImageFont.truetype("arial.ttf", 14)
+                except:
+                    font = ImageFont.load_default()
+
+                # Metinleri tara
+                sonuclar = self.okuyucu.readtext(giris_yolu)
+                
+                for bbox, metin, guven in sonuclar:
+                    if guven > 0.3:
+                        sol_ust = bbox[0]
+                        sag_alt = bbox[2]
+                        
+                        # Balonun içini temizle (beyaz kutu)
+                        cizim.rectangle([sol_ust[0], sol_ust[1], sag_alt[0], sag_alt[1]], fill="white")
+                        
+                        # Çevir ve yazdır
+                        turkce_metin = self.cevirmen.translate(metin)
+                        cizim.text((sol_ust[0] + 3, sol_ust[1] + 3), turkce_metin, fill="black", font=font)
+
+                # Yeni görseli kaydet
+                goruntu_pil.save(cikis_yolu)
+                print(f"  -> Tamamlandı ve kaydedildi.\n")
+                
+            except Exception as e:
+                print(f"  -> Hata oluştu ({dosya_adi}): {e}\n")
+
+        print("Tüm işlemler başarıyla tamamlandı! Çevrilen sayfalar '", hedef_klasor, "' klasöründe.")
+
+# --- KULLANIM ÖRNEĞİ ---
+if __name__ == "__main__":
+    bot = TopluMangaCevirmen()
+    
+    # Klasör yollarını kendi bilgisayarına/ortamına göre ayarlayabilirsin
+    # kaynak_klasor = "manga_bolum_1"
+    # hedef_klasor = "manga_bolum_1_tr"
+    # bot.klasoru_cevir(kaynak_klasor, hedef_klasor)
+    
+    print("Toplu çeviri modülü hazır!")
