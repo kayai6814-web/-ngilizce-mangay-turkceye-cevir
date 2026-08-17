@@ -1,0 +1,100 @@
+import os
+import cv2
+import easyocr
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+from textwrap import wrap
+from deep_translator import GoogleTranslator
+
+class AkilliMangaMotoru:
+    def __init__(self):
+        print("OCR motoru yükleniyor...")
+        self.okuyucu = easyocr.Reader(['en'])
+        self.cevirmen = GoogleTranslator(source='en', target='tr')
+
+    def _arkaplan_rengi_bul(self, cv_img, bbox):
+        """Balonun kenar piksellerinden ortalama arka plan rengini çıkarır."""
+        x_min, y_min = int(bbox[0][0]), int(bbox[0][1])
+        x_max, y_max = int(bbox[2][0]), int(bbox[2][1])
+        
+        # Sınır dışına çıkmayı önle
+        h, w, _ = cv_img.shape
+        x_min, y_min = max(0, x_min), max(0, y_min)
+        x_max, y_max = min(w, x_max), min(h, y_max)
+        
+        # Bölgenin kenarındaki piksellerden renk örnekle
+        bolge = cv_img[y_min:y_max, x_min:x_max]
+        if bolge.size == 0:
+            return (255, 255, 255) # Varsayılan beyaz
+            
+        ortalama_renk = bolge.mean(axis=(0, 1))
+        return (int(ortalama_renk[2]), int(ortalama_renk[1]), int(ortalama_renk[0])) # BGR -> RGB
+
+    def _metni_sigdir_ve_ciz(self, draw, bbox, metin, font_path):
+        """Metni balonun genişliğine göre alt alta sarar ve sığacak şekilde fontu küçültür."""
+        x_min, y_min = bbox[0][0], bbox[0][1]
+        x_max, y_max = bbox[2][0], bbox[2][1]
+        
+        genislik = x_max - x_min
+        yukseklik = y_max - y_min
+        
+        font_boyutu = 16
+        font = ImageFont.load_default()
+        
+        # Uygun font boyutunu ve satır sarmalamayı bul
+        while font_boyutu > 8:
+            try:
+                font = ImageFont.truetype(font_path, font_boyutu)
+            except:
+                break
+                
+            # Genişliğe göre kelimeleri sar
+            karakter_limiti = max(int(genislik / (font_boyutu * 0.6)), 5)
+            satirlar = wrap(metin, width=karakter_limiti)
+            
+            toplam_metin_yuksekligi = len(satirlar) * (font_boyutu + 2)
+            if toplam_metin_yuksekligi <= yukseklik or font_boyutu == 9:
+                break
+            font_boyutu -= 1
+
+        # Satırları balona ortalayarak yaz
+        y_offset = y_min + 2
+        for satir in satirlar:
+            draw.text((x_min + 3, y_offset), satir, fill="black", font=font)
+            y_offset += font_boyutu + 2
+
+    def klasoru_isle(self, kaynak_klasor, hedef_klasor, ilerleme_callback=None):
+        if not os.path.exists(hedef_klasor):
+            os.makedirs(hedef_klasor)
+            
+        dosyalar = [f for f in os.listdir(kaynak_klasor) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
+        toplam = len(dosyalar)
+        
+        for i, dosya in enumerate(sorted(dosyalar), 1):
+            giris = os.path.join(kaynak_klasor, dosya)
+            cikis = os.path.join(hedef_klasor, dosya)
+            
+            if ilerleme_callback:
+                ilerleme_callback(f"İşleniyor: {dosya} ({i}/{toplam})")
+                
+            cv_img = cv2.imread(giris)
+            if cv_img is None: continue
+            
+            pil_img = Image.open(giris).convert("RGB")
+            draw = ImageDraw.Draw(pil_img)
+            
+            sonuclar = self.okuyucu.readtext(giris)
+            for bbox, metin, guven in sonuclar:
+                if guven > 0.3:
+                    # 1. Akıllı Renk Uyumlu Temizleme
+                     bg_renk = self._arkaplan_rengi_bul(cv_img, bbox)
+                     draw.rectangle([bbox[0][0], bbox[0][1], bbox[2][0], bbox[2][1]], fill=bg_renk)
+                     
+                     # 2. Çeviri ve Akıllı Sığdırma
+                     tr_metin = self.cevirmen.translate(metin)
+                     self._metni_sigdir_ve_ciz(draw, bbox, tr_metin, "arial.ttf")
+                     
+            pil_img.save(cikis)
+            
+        if ilerleme_callback:
+            ilerleme_callback("Tüm işlemler başarıyla tamamlandı!")
