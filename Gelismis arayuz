@@ -1,0 +1,79 @@
+import tkinter as tk
+from tkinter import filedialog, messagebox
+import customtkinter as ctk
+from manga_motor import AkilliMangaMotoru
+import threading
+
+ctk.set_appearance_mode("Dark")
+ctk.set_default_color_theme("blue")
+
+class MangaArayuz(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        
+        self.title("AI Manga Çevirmen & Otomasyon")
+        self.geometry("500x400")
+        self.resizable(False, False)
+        
+        self.motor = AkilliMangaMotoru()
+        
+        # Başlık
+        self.baslik = ctk.CTkLabel(self, text="Otomatik Manga Çevirmeni", font=("Arial", 20, "bold"))
+        self.baslik.pack(pady=20)
+        
+        # Klasör Seçim Butonları
+        self.btn_kaynak = ctk.CTkButton(self, text="Kaynak Klasör Seç (İngilizce)", command=self.kaynak_sec)
+        self.btn_kaynak.pack(pady=10)
+        self.lbl_kaynak = ctk.CTkLabel(self, text="Seçilen: Yok", text_color="gray")
+        self.lbl_kaynak.pack(pady=2)
+        
+        self.btn_hedef = ctk.CTkButton(self, text="Hedef Klasör Seç (Türkçe)", command=self.hedef_sec)
+        self.btn_hedef.pack(pady=10)
+        self.lbl_hedef = ctk.CTkLabel(self, text="Seçilen: Yok", text_color="gray")
+        self.lbl_hedef.pack(pady=2)
+        
+        # Çeviriyi Başlat Butonu
+        self.btn_baslat = ctk.CTkButton(self, text="Çeviriyi Başlat", fg_color="green", hover_color="darkgreen", command=self.ceviriyi_baslat)
+        self.btn_baslat.pack(pady=20)
+        
+        # Durum Çubuğu
+        self.lbl_durum = ctk.CTkLabel(self, text="Hazır", font=("Arial", 12))
+        self.lbl_durum.pack(pady=10)
+        
+        self.kaynak_yol = ""
+        self.hedef_yol = ""
+
+    def kaynak_sec(self):
+        self.kaynak_yol = filedialog.askdirectory()
+        if self.kaynak_yol:
+            self.lbl_kaynak.configure(text=f"...{self.kaynak_yol[-30:]}", text_color="white")
+
+    def hedef_sec(self):
+        self.hedef_yol = filedialog.askdirectory()
+        if self.hedef_yol:
+            self.lbl_hedef.configure(text=f"...{self.hedef_yol[-30:]}", text_color="white")
+
+    def guncelle_durum(self, mesaj):
+        self.lbl_durum.configure(text=mesaj)
+
+    def ceviriyi_baslat(self):
+        if not self.kaynak_yol or not self.hedef_yol:
+            messagebox.showerror("Hata", "Lütfen hem kaynak hem hedef klasörü seçin!")
+            return
+            
+        # İşlemi arayüzü dondurmamak için arka planda (thread) çalıştırıyoruz
+        def calistir():
+            self.btn_baslat.configure(state="disabled")
+            try:
+                self.motor.klasoru_isle(self.kaynak_yol, self.hedef_yol, self.guncelle_durum)
+                messagebox.showinfo("Başarılı", "Tüm manga bölümleri başarıyla çevrildi!")
+            except Exception as e:
+                messagebox.showerror("Hata", f"Bir hata oluştu: {e}")
+            finally:
+                self.btn_baslat.configure(state="normal")
+                
+        threading.Thread(target=calistir).start()
+
+if __name__ == "__main__":
+    app = MangaArayuz()
+    app.mainloop()
